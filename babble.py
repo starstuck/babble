@@ -1,8 +1,9 @@
 import logging
+import xml.etree.ElementTree as ET
 
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
-
+from sleekxmpp.xmlstream.stanzabase import ElementBase
 
 COMPONENT="metrics.localhost"
 SECRET="secret"
@@ -15,15 +16,16 @@ class MetricsComponent(ComponentXMPP):
     def __init__(self, jid, secret, server, port):
         ComponentXMPP.__init__(self, jid, secret, server, port)
 
-        # You don't need a session_start handler, but that is
-        # where you would broadcast initial presence.
-
-        # The message event is triggered whenever a message
-        # stanza is received. Be aware that that includes
-        # MUC messages and error messages.
         self.add_event_handler("message", self._handle_message)
         self.add_event_handler("session_bind", self._handle_session_bind)
         self.add_event_handler("presence", self._handle_presence)
+        self.add_event_handler('session_start', self._handle_session_start)
+        self.add_event_handler('jabber_rpc_method_call', self._handle_jabber_rpc_method_call)
+
+        self.register_plugin('xep_0009') # Jabber RPC
+        self.register_plugin('xep_0030') # Service Discovery
+        self.register_plugin('xep_0060') # PubSub
+        self.register_plugin('xep_0199') # XMPP Ping
 
     def _handle_message(self, msg):
         """
@@ -50,17 +52,42 @@ class MetricsComponent(ComponentXMPP):
 
     def _handle_presence(self, presence):
         logging.info("Got presence update: %s", presence)
-    
+
+    def _handle_session_start(self, event):
+        logging.info("Session started: %s", event)
+        #self.send_presence()
+        #self.get_roster()
+
+    def _handle_jabber_rpc_method_call(self, iq):
+        logging.info("supposed to handle method call: %s", iq)
+        pid = iq['id']
+        caller_jid = iq['from']
+        method = iq['rpc_query']['method_call']['method_name']
+        logging.info("responding to method: %s", method)
+        params = self._make_config_param()
+        res = self['xep_0009'].make_iq_method_response(pid, caller_jid, params)
+        logging.info("Sending respone: %s", res)
+        res.send()
+
+    def _make_config_param(self):
+        params = ET.Element('params')
+        param = ET.SubElement(params, 'param')
+        struct = ET.SubElement(param, 'struct')
+        member = ET.SubElement(struct, 'member')
+        name = ET.SubElement(member, 'name')
+        name.text = 'account'
+        value = ET.SubElement(member, 'value')
+        string = ET.SubElement(value, 'string')
+        string.text = 'test-account'
+        return ElementBase(params)
+
 
 def main ():
     logging.basicConfig(level=logging.DEBUG,
-                        format='%(levelname)-8s %(message)s')
+                        format='%(asctime)s %(levelname)s %(name)s %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S')
 
     xmpp = MetricsComponent(COMPONENT, SECRET, SERVER_HOST, SERVER_PORT)
-    xmpp.registerPlugin('xep_0030') # Service Discovery
-    xmpp.registerPlugin('xep_0004') # Data Forms
-    xmpp.registerPlugin('xep_0060') # PubSub
-    xmpp.registerPlugin('xep_0199') # XMPP Ping
     if xmpp.connect():
         print("Connected")
         xmpp.process(block=True)
