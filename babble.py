@@ -72,7 +72,8 @@ class MetricsComponent(ComponentXMPP):
     def _make_config_param(self):
         params = ET.Element('params')
         param = ET.SubElement(params, 'param')
-        struct = ET.SubElement(param, 'struct')
+        pvalue = ET.SubElement(param, 'value')
+        struct = ET.SubElement(pvalue, 'struct')
         member = ET.SubElement(struct, 'member')
         name = ET.SubElement(member, 'name')
         name.text = 'account'
@@ -83,7 +84,7 @@ class MetricsComponent(ComponentXMPP):
 
 
 def main ():
-    logging.basicConfig(level=logging.DEBUG,
+    logging.basicConfig(level=logging.INFO,
                         format='%(asctime)s %(levelname)s %(name)s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
 
