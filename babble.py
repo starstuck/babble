@@ -3,7 +3,7 @@ import xml.etree.ElementTree as ET
 
 import sleekxmpp
 from sleekxmpp.componentxmpp import ComponentXMPP
-from sleekxmpp.xmlstream.stanzabase import ElementBase
+from sleekxmpp.plugins.xep_0009.binding import py2xml
 
 COMPONENT="metrics.localhost"
 SECRET="secret"
@@ -64,23 +64,14 @@ class MetricsComponent(ComponentXMPP):
         caller_jid = iq['from']
         method = iq['rpc_query']['method_call']['method_name']
         logging.info("responding to method: %s", method)
-        params = self._make_config_param()
+        config = self._get_config()
+        params = py2xml(config)
         res = self['xep_0009'].make_iq_method_response(pid, caller_jid, params)
         logging.info("Sending respone: %s", res)
         res.send()
 
-    def _make_config_param(self):
-        params = ET.Element('params')
-        param = ET.SubElement(params, 'param')
-        pvalue = ET.SubElement(param, 'value')
-        struct = ET.SubElement(pvalue, 'struct')
-        member = ET.SubElement(struct, 'member')
-        name = ET.SubElement(member, 'name')
-        name.text = 'account'
-        value = ET.SubElement(member, 'value')
-        string = ET.SubElement(value, 'string')
-        string.text = 'test-account'
-        return ElementBase(params)
+    def _get_config(self):
+        return {'account': 'nice-account'}
 
 
 def main ():
