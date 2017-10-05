@@ -11,38 +11,24 @@ SERVER_HOST="127.0.0.1"
 SERVER_PORT=8888
 
 
-class MetricsComponent(ComponentXMPP):
+class Service(object):
 
-    def __init__(self, jid, secret, server, port):
-        ComponentXMPP.__init__(self, jid, secret, server, port)
+    def __init__(self, xmpp):
+        self.xmpp = xmpp
+        xmpp.add_event_handler("message", self._handle_message)
+        xmpp.add_event_handler("session_bind", self._handle_session_bind)
+        xmpp.add_event_handler("presence", self._handle_presence)
+        xmpp.add_event_handler('session_start', self._handle_session_start)
+        xmpp.add_event_handler('jabber_rpc_method_call', self._handle_jabber_rpc_method_call)
 
-        self.add_event_handler("message", self._handle_message)
-        self.add_event_handler("session_bind", self._handle_session_bind)
-        self.add_event_handler("presence", self._handle_presence)
-        self.add_event_handler('session_start', self._handle_session_start)
-        self.add_event_handler('jabber_rpc_method_call', self._handle_jabber_rpc_method_call)
+        xmpp.register_plugin('xep_0009') # Jabber RPC
+        xmpp.register_plugin('xep_0030') # Service Discovery
+        xmpp.register_plugin('xep_0060') # PubSub
+        xmpp.register_plugin('xep_0199') # XMPP Ping
 
-        self.register_plugin('xep_0009') # Jabber RPC
-        self.register_plugin('xep_0030') # Service Discovery
-        self.register_plugin('xep_0060') # PubSub
-        self.register_plugin('xep_0199') # XMPP Ping
+        # TODO: the service should manage its roster
 
     def _handle_message(self, msg):
-        """
-        Process incoming message stanzas. Be aware that this also
-        includes MUC messages and error messages. It is usually
-        a good idea to check the messages's type before processing
-        or sending replies.
-
-        Since a component may send messages from any number of JIDs,
-        it is best to always include a from JID.
-
-        Arguments:
-            msg -- The received message stanza. See the documentation
-                   for stanza objects and the Message stanza to see
-                   how it may be used.
-        """
-        # The reply method will use the messages 'to' JID as the
         # outgoing reply's 'from' JID.
         logging.info("Recived message: %s", msg)
         msg.reply("Thanks for sending\n%(body)s" % msg).send()
@@ -51,7 +37,8 @@ class MetricsComponent(ComponentXMPP):
         logging.info("New session started by: %s", jid)
 
     def _handle_presence(self, presence):
-        logging.info("Got presence update: %s", presence)
+        logging.info("Received presence update: %s", presence)
+        logging.info("Known rosters: %s", self.xmpp.roster._rosters)
 
     def _handle_session_start(self, event):
         logging.info("Session started: %s", event)
@@ -59,16 +46,30 @@ class MetricsComponent(ComponentXMPP):
         #self.get_roster()
 
     def _handle_jabber_rpc_method_call(self, iq):
-        logging.info("supposed to handle method call: %s", iq)
         pid = iq['id']
         caller_jid = iq['from']
         method = iq['rpc_query']['method_call']['method_name']
         logging.info("responding to method: %s", method)
         config = self._get_config()
         params = py2xml(config)
-        res = self['xep_0009'].make_iq_method_response(pid, caller_jid, params)
+        res = self.xmpp['xep_0009'].make_iq_method_response(pid, caller_jid, params)
         logging.info("Sending respone: %s", res)
         res.send()
+        self._subscribe(caller_jid)
+
+    def _handle_probe(self, presence):
+        sender = presence['from']
+        # Populate the presence reply with the agent's current status.
+        self.xmpp.send_presence(pto=sender, pstatus="Ready for data", pshow="chat")
+
+    def _subscribe(self, jid):
+        xmpp = self.xmpp
+        if jid.bare in xmpp.roster[xmpp.boundjid.bare]:
+            logging.info("Already subscribed to %s presence", jid)
+        else:
+            logging.info("Subscribing to %s presence", jid)
+            self.xmpp.sendPresenceSubscription(pto=jid,
+                                               ptype='subscribe')
 
     def _get_config(self):
         return {'account': 'nice-account'}
@@ -79,14 +80,14 @@ def main ():
                         format='%(asctime)s %(levelname)s %(name)s %(message)s',
                         datefmt='%Y-%m-%d %H:%M:%S')
 
-    xmpp = MetricsComponent(COMPONENT, SECRET, SERVER_HOST, SERVER_PORT)
+    xmpp = ComponentXMPP(COMPONENT, SECRET, SERVER_HOST, SERVER_PORT)
+    service = Service(xmpp)
     if xmpp.connect():
-        print("Connected")
         xmpp.process(block=True)
-        print("Done")
+        logging.info("Done")
     else:
-        print("Unable to connect.")
+        logging.error("Unable to connect.")
 
-        
+
 if __name__ == '__main__':
     main()
