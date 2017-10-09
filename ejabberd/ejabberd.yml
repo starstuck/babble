@@ -275,12 +275,12 @@ shaper:
   ##
   ## The "normal" shaper limits traffic speed to 1000 B/s
   ##
-  normal: 1000
+  normal: 100000
 
   ##
   ## The "fast" shaper limits traffic speed to 50000 B/s
   ##
-  fast: 50000
+  fast: 500000
 
 ##
 ## This option specifies the maximum number of elements in the queue
